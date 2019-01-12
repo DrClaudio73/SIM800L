@@ -16,10 +16,10 @@
 
 // max buffer length
 #define LINE_MAX	50
+#define MAX_ATTEMPTS 15
 char command[LINE_MAX];
 int command_valid=0;
 int quality=0;
-int SIM800LReady=0;
 
 // read a line from the UART controller
 char* read_line(uart_port_t uart_controller) {
@@ -27,7 +27,7 @@ char* read_line(uart_port_t uart_controller) {
 	char *ptr = line;
 	//printf("\nread_line on UART: %d\n", (int) uart_controller);
     while(1) {
-		int num_read = uart_read_bytes(uart_controller, (unsigned char *)ptr, 1, 1000/portTICK_RATE_MS);//portMAX_DELAY);
+		int num_read = uart_read_bytes(uart_controller, (unsigned char *)ptr, 1, 100/portTICK_RATE_MS);//portMAX_DELAY);
 		if(num_read == 1) {
 			// new line found, terminate the string and return 
             //printf("received char: %c", *ptr);
@@ -53,31 +53,31 @@ char* parse_line(char* line){
     char* token2;
 	
     if (strncmp("SMS Ready\r\n",line,11)==0){
-            printf("\r\nSMS Ready Received!!!\r\n");
+            sprintf(subline,"%s","\r\nSMS Ready Received!!!\r\n");
+            return subline;
     }
 
     if (strncmp("+CSQ: ",line,6)==0){
-            printf("\r\nSignal Quality Report!!!\r\n");
+            //printf("\r\nSignal Quality Report!!!\r\n");
             token = strtok(line, "+CSQ: ");
-            //printf("TOKEN%s",token);
+            //printf("token: %s",token);
             token2 = strtok(token, ",");
             //printf("token2: %s",token2);
             quality= atoi(token2);
-            return token;
+            sprintf(subline,"%s","\r\nSignal Quality Report!!!\r\n");
+            return subline;            
     }
 
-    if (strncmp(line,"OK\n",3)==0){
-        sprintf(subline,"%s","OK\n");
-    } else if(strncmp(line,"AT+CGI\n",7)==0){
-        sprintf(subline,"%s","OK+CGI1030\n");
-    } else{
-        sprintf(subline,"%s",line);
-    }
+    sprintf(subline,"%s",line);
     return subline;
 }
 
 void stampa_stringa(char* line, int numline){
-     	printf("Rcv%d: %s", numline,line);
+     	//printf("Rcv%d: %s", numline,line);
+        if(strlen(line)>1){
+            printf("%s",line);
+        }
+        numline++;
 }
 
 void getCommand(){
@@ -142,6 +142,39 @@ void toggleLed(){
     }
 }
 
+void scriviUART(uart_port_t uart_controller, char* text){
+    uart_write_bytes(uart_controller, text, strlen(text));    
+    //printf("%s ---- %d",text,strlen(text));
+    return;
+}
+
+int verificaComando(uart_port_t uart_controller, char* text, char* condition){
+    int skip=0;
+    int SIM808Ready=0;
+    char *line;
+
+    int k=0;
+    while ((!SIM808Ready)&&(k<MAX_ATTEMPTS)) {
+        k++;
+        //uart_write_bytes(UART_NUM_1, "AT\r\n", strlen("AT\r\n"));
+        if (!skip){
+            scriviUART(UART_NUM_1, text);
+            printf("\nSending command: -- %s", text);
+        }
+        vTaskDelay(550 / portTICK_RATE_MS); 
+        line = read_line(UART_NUM_1);
+        if (strncmp(condition,line,4)==0){
+            //printf("\r\nCondition OK !!!\r\n");
+            SIM808Ready=1;
+        }
+        if (strncmp("\r\n",line,2)==0){
+            skip=1;
+            //printf("skipping........");
+        }
+    }
+    return 0; //OK
+}
+
 // Main application
 void app_main() {
 	printf("==============================\r\n");
@@ -175,48 +208,47 @@ void app_main() {
     uart_driver_install(UART_NUM_2, 1024, 0, 0, NULL, 0);*/
     //uint8_t *data2 = (uint8_t *) malloc(1024);
     char *line1;
-    while (!SIM800LReady) {
-        uart_write_bytes(UART_NUM_1, "AT\r", 3);
-        vTaskDelay(2000 / portTICK_RATE_MS); 
-        line1 = read_line(UART_NUM_1);
-        if (strncmp("OK\r\n",line1,4)==0){
-            printf("\r\nSIM800L Ready !!!\r\n");
-            SIM800LReady=1;
-        }
+    printf("\nVerifying SIM808 responds.....\n");
+    if(verificaComando(UART_NUM_1,"AT\r\n","OK\r\n")==0){
+        printf("\r\nSIM808 Ready !!!\r\n");
     }
+
+    printf("\nDisabling Echo....\n");
+    if (verificaComando(UART_NUM_1,"ATE 0\r\n","OK\r\n")==0){
+        printf("\nEcho disabled !!!\n");
+    }
+
+    printf("\nSetting SMS text mode....\n");
+    if (verificaComando(UART_NUM_1,"AT+CMGF=1\r\n","OK\r\n")==0){
+        printf("\nText Mode enabled !!!\n");
+    }
+
+    printf("\nEnabling DTMF recognition....\n");
+    if (verificaComando(UART_NUM_1,"AT+DDET=1\r\n","OK\r\n")==0){
+        printf("\nDTMF recognition is on !!!\n");
+    }
+
     //Launching Task for getting MANUAL commands to be sent to SIM800L
     xTaskCreate(&getCommand, "getCommand", 8192, NULL, 5, NULL);
     //Launching Task for blinking led according to signal quality report 
     xTaskCreate(&toggleLed, "toggleLed", 4096, NULL, 5, NULL);
     
     printf("Entering while loop!!!!!\r\n");
-    int k=0;
+
     while (1) {
-        k++;
 		// Read 4 lines data from the UART1
-        int j=1;
         line1 = read_line(UART_NUM_1);
-        stampa_stringa(line1,j++);
         char *subline1=parse_line(line1);
-        char *line2 = read_line(UART_NUM_1);
-        stampa_stringa(line2,j++);
-        char *subline2=parse_line(line2);
-        char *line3 = read_line(UART_NUM_1);
-        stampa_stringa(line3,j++);
-        char *subline3=parse_line(line3);
-        char *line4 = read_line(UART_NUM_1);
-        stampa_stringa(line4,j++);
-        char *subline4=parse_line(line4);
+        stampa_stringa(subline1,1);
 
         if (command_valid){
             printf("\nCommand valid, sending %s",command);
-            uart_write_bytes(UART_NUM_1, command, strlen(command));
+            //uart_write_bytes(UART_NUM_1, command, strlen(command));
+            scriviUART(UART_NUM_1, command);
             command_valid=0;
-        } else { //if no manual command then send request to report on signal quality
-            uart_write_bytes(UART_NUM_1, "AT+CSQ\r\n", 8);
         }
 
-        vTaskDelay(2000 / portTICK_RATE_MS);
+        vTaskDelay(50 / portTICK_RATE_MS);
 
 		/* Read data from the UART2
         char *line2 = read_line(UART_NUM_2);
