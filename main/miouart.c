@@ -31,6 +31,7 @@ int checkStatus() { // CHECK STATUS FOR RINGING or IN CALL
 #include "sdkconfig.h"
 #define BLINK_GPIO CONFIG_BLINK_GPIO
 #include "simOK.c"
+#include "credentials.h"
 
 //toggleLed
 void toggleLed(){
@@ -85,6 +86,7 @@ void setup(void){
 	printf("Welcome to SIM800L control App\r\n");
 	printf("==============================\r\n");
 
+    printf("Allowed sim number is %s\r\n",ALLOWED1);
     //presentation blinking
     gpio_set_level(BLINK_GPIO, 1);
     vTaskDelay(500 / portTICK_RATE_MS);
@@ -93,31 +95,6 @@ void setup(void){
     gpio_set_level(BLINK_GPIO, 1);
     vTaskDelay(500 / portTICK_RATE_MS);
     gpio_set_level(BLINK_GPIO, 1);
-
-    printf("\nVerifying if SIM808 responds.....\n");
-    if(verificaComando(UART_NUM_1,"AT","OK\r\n")==0){
-        printf("\r\nSIM808 Ready !!!\r\n");
-    }
-
-    printf("\nDisabling Echo....\n");
-    if (verificaComando(UART_NUM_1,"ATE 0","OK\r\n")==0){
-        printf("\nEcho disabled !!!\n");
-    }
-
-    printf("\nSetting SMS text mode....\n");
-    if (verificaComando(UART_NUM_1,"AT+CMGF=1","OK\r\n")==0){
-        printf("\nText Mode enabled !!!\n");
-    }
-
-    printf("\nEnabling DTMF recognition....\n");
-    if (verificaComando(UART_NUM_1,"AT+DDET=1","OK\r\n")==0){
-        printf("\nDTMF recognition is on !!!\n");
-    }
-
-    printf("\nChecking Signal Quality....\n");
-    if (verificaComando(UART_NUM_1,"AT+CSQ","+CSQ")==0){
-        printf("\nQuality report gotten !!!\n");
-    }
 
     if (simOK(UART_NUM_1)==-1){
         printf("\nSim808 module not found, stop here!");
@@ -146,15 +123,19 @@ void loop(void){
     }
 
     vTaskDelay(50 / portTICK_RATE_MS);
+    int current_phone_status = checkPhoneActivityStatus();
 
-    /* Read data from the UART2
-    char *line2 = read_line(UART_NUM_2);
-    // Write data back to the UART
-    printf("I2: %s", line2);
-    char* subline2=parse_line(line2,k);
-    printf("O2: %s", subline2);
-    uart_write_bytes(UART_NUM_2,subline2, strlen(subline2));
-    vTaskDelay(1000 / portTICK_RATE_MS);*/
+    if (current_phone_status == 0) {
+        printf("No call in progress\n");
+        //digitalWrite(red, LOW); // red LED off
+    } else {
+        if (current_phone_status == 4) { // in call 
+            printf("Handling Call....\n");
+            //digitalWrite(red, HIGH); // red LED on
+            int DTMF = checkDTMF();
+            printf("Tone detected equals %d\r\n",DTMF);
+        }
+    }
 }
 
 // Main application
