@@ -31,7 +31,7 @@ int checkStatus() { // CHECK STATUS FOR RINGING or IN CALL
 #include "sdkconfig.h"
 #define BLINK_GPIO CONFIG_BLINK_GPIO
 #include "simOK.c"
-#include "credentials.h"
+
 
 //toggleLed
 void toggleLed(){
@@ -82,11 +82,11 @@ void setup(void){
     uart_driver_install(UART_NUM_2, 1024, 0, 0, NULL, 0);*/
     //uint8_t *data2 = (uint8_t *) malloc(1024);
 
-    printf("==============================\r\n");
-	printf("Welcome to SIM800L control App\r\n");
-	printf("==============================\r\n");
+    ESP_LOGW(TAG,"==============================");
+	ESP_LOGW(TAG,"Welcome to SIM800L control App");
+	ESP_LOGW(TAG,"==============================\r\n");
 
-    printf("Allowed sim number is %s\r\n",ALLOWED1);
+    ESP_LOGI(TAG,"Allowed sim number is %s\r\n",ALLOWED1);
     //presentation blinking
     gpio_set_level(BLINK_GPIO, 1);
     vTaskDelay(500 / portTICK_RATE_MS);
@@ -97,7 +97,7 @@ void setup(void){
     gpio_set_level(BLINK_GPIO, 1);
 
     if (simOK(UART_NUM_1)==-1){
-        printf("\nSim808 module not found, stop here!");
+        ESP_LOGE(TAG,"\nSim808 module not found, stop here!");
         foreverRed();
     } 
 
@@ -115,7 +115,7 @@ void loop(void){
     stampa_stringa(subline1);
 
     if (command_valid){
-        printf("\nCommand valid, sending %s",command);
+        ESP_LOGW(TAG,"\nCommand valid, sending %s",command);
         //uart_write_bytes(UART_NUM_1, command, strlen(command));
         scriviUART(UART_NUM_1, command);
         //verificaComando(UART_NUM_1,command,"OK\r\n");
@@ -126,22 +126,43 @@ void loop(void){
     int current_phone_status = checkPhoneActivityStatus();
 
     if (current_phone_status == 0) {
-        printf("No call in progress\n");
+        ESP_LOGI(TAG,"No call in progress");
         //digitalWrite(red, LOW); // red LED off
-    } else {
-        if (current_phone_status == 4) { // in call 
-            printf("Handling Call....\n");
+    } else if (current_phone_status == -1){
+        ESP_LOGE(TAG,"Not possible to determine Phone Activity Status!!!");
+    } else if (current_phone_status == 4) { // in call 
+            ESP_LOGW(TAG,"Handling Call....");
             //digitalWrite(red, HIGH); // red LED on
             int DTMF = checkDTMF();
-            printf("Tone detected equals %d\r\n",DTMF);
+            ESP_LOGW(TAG,"Tone detected equals %d",DTMF);
+    } else if (current_phone_status == 3){ //RINGING
+        if (checkCallingNumber()==0){
+            ESP_LOGI(TAG,"Valid calling number: %s",parametro_feedback);
+            ESP_LOGW(TAG,"\nChecking battery level....");
+                if (verificaComando(UART_NUM_1,"ATA","OK\r\n")==0){
+                    ESP_LOGI(TAG,"\nAnswered call!!!");
+                    if (verificaComando(UART_NUM_1,"AT+VTS=\"{1,1],{0,2},{3,1}\"","OK\r\n")==0){
+                        ESP_LOGI(TAG,"\nAnswer tones sent!!!");
+                    } else {
+                        ESP_LOGE(TAG,"\nERROR in sending answering tones!!!");
+                    }
+                } else {
+                    ESP_LOGE(TAG,"\nError in answering Call!!!");
+                }
+        } else {
+            ESP_LOGE(TAG,"Calling number %s NOT valid!!!",parametro_feedback);
         }
     }
 }
 
+
+
+
+
 // Main application
 void app_main() {
 	setup();
-    printf("Entering while loop!!!!!\r\n");
+    ESP_LOGE(TAG,"Entering while loop!!!!!\r\n");
     while(1)
         loop();
     fflush(stdout);

@@ -3,6 +3,9 @@
 #include "string.h"
 #include "driver/gpio.h"
 #endif
+#include "credentials.h"
+#include "esp_log.h"
+static const char *TAG = "SIM808App";
 // max buffer length
 #define LINE_MAX	80
 #define MAX_ATTEMPTS 40
@@ -75,8 +78,6 @@ char* parse_line(char* line){
         return subline;
     }
 
-
-
     sprintf(subline,"%s",line);
     return subline;
 }
@@ -84,7 +85,7 @@ char* parse_line(char* line){
 void stampa_stringa(char* line){
      	//printf("Rcv%d: %s", numline,line);
         if(strlen(line)>1){
-            printf("%s",line);
+            ESP_LOGW(TAG,"%s",line);
         }
 }
 
@@ -139,7 +140,7 @@ int verificaComando(uart_port_t uart_controller, char* text, char* condition){
     if (!skip){
         scriviUART(UART_NUM_1, text);
         scriviUART(UART_NUM_1, "\r");
-        printf("\nSending command: -- %s \n", text);
+        printf("\nSending command: -- %s\n", text);
     }
     while ((!SIM808Ready)&&(k<MAX_ATTEMPTS)) {
         k++;
@@ -182,7 +183,7 @@ int verificaComando(uart_port_t uart_controller, char* text, char* condition){
     }
     
     if (k==MAX_ATTEMPTS){
-        printf("\r\nmax_ATTEMPTS %d\r\n",k);
+        ESP_LOGE(TAG,"\r\nmax_ATTEMPTS %d\r\n",k);
         return(-1); //ERROR
     } else {
         return 0; //OK
@@ -190,9 +191,9 @@ int verificaComando(uart_port_t uart_controller, char* text, char* condition){
 }
 
 void reset_module(uart_port_t uart_controller){
-    printf("Resetting module....\n");
+    ESP_LOGW(TAG,"Resetting module....\n");
     if (verificaComando(UART_NUM_1,"AT+CFUN=1,1","SMS Ready\r\n")==0){
-        printf("\nSIM got RESET command !!!\n");
+        ESP_LOGI(TAG,"\nSIM got RESET command !!!\n");
     }
 }
 
@@ -206,9 +207,8 @@ for (;;) { // blink red LED forever
 }
 
 int simOK(uart_port_t uart_controller) { // SIM CHECK OK
-    printf("Checking for sim808 module and SIM card..\r\n");
-    reset_module(uart_controller);
-
+    ESP_LOGI(TAG,"Checking for sim808 module and SIM card...");
+    //reset_module(uart_controller); DA RIPRISTINARE
     // time to startup 3 sec
     for (int i = 0; i < 6; i++) {
     //presentation blinking
@@ -222,52 +222,52 @@ int simOK(uart_port_t uart_controller) { // SIM CHECK OK
     if (verificaComando(UART_NUM_1,"AT","OK\r\n")==0){
         printf("\nSIM808 module found !!!\n");
 
-        vTaskDelay(1000 / portTICK_RATE_MS); // wait for sim800 to settle a bit
+        vTaskDelay(1000 / portTICK_RATE_MS); // wait for sim808 to settle a bit
 
-
-        printf("\nDisabling Echo....\n");
+        ESP_LOGW(TAG,"\nDisabling Echo....");
         if (verificaComando(UART_NUM_1,"ATE 0","OK\r\n")==0){
-            printf("\nEcho disabled !!!\n");
+            ESP_LOGI(TAG,"\nEcho disabled !!!");
         } else {
-            printf("\nError in disabling echo !!!\n");
+            ESP_LOGE(TAG,"\nError in disabling echo !!!");
         }
 
-        printf("\nChecking if SIM card inserted....\n");
+        /*
+        ESP_LOGW(TAG,"\nChecking if SIM card inserted...");
         if (verificaComando(UART_NUM_1,"AT+CSMINS?","+CSMINS: 0,1\r\n")==0){
-            printf("\nSIM card is inserted!!!\n");
+            ESP_LOGI(TAG,"\nSIM card is inserted!!!");
         } else {
-            printf("\nno SIM card found, stop here\n"); // continue if SIM card found
+            ESP_LOGE(TAG,"\nno SIM card found, stop here"); // continue if SIM card found
             return -1; //ERROR
         }
 
-        printf("Allow some time for SIM to register on the network...");
+        ESP_LOGW(TAG,"Allow some time for SIM to register on the network...");
 
-        printf("\nChecking battery level....\n");
+        ESP_LOGW(TAG,"\nChecking battery level....");
         if (verificaComando(UART_NUM_1,"AT+CBC","OK\r\n")==0){
-            printf("\nAnswer from module relvant to battery level !!!\n");
+            ESP_LOGI(TAG,"\nAnswer from module relvant to battery level !!!");
         } else {
-            printf("\nError in answer from module relvant to battery level !!!\n");
+            ESP_LOGE(TAG,"\nError in answer from module relvant to battery level !!!");
         }
 
-        printf("\nset speaker volume to 80 [0-100]....\n");
+        ESP_LOGW(TAG,"\nSetting speaker volume to 80 [0-100]....");
         if (verificaComando(UART_NUM_1,"AT+CLVL=80","OK\r\n")==0){
-            printf("\nSpeaker Volume set !!!\n");
+            ESP_LOGI(TAG,"\nSpeaker Volume set !!!");
         } else {
-            printf("\nError in setting speaker volume !!!\n");
+            ESP_LOGE(TAG,"\nError in setting speaker volume !!!");
         }
 
-        printf("\nset ringer volume to 80 [0-100]....\n");
+        ESP_LOGW(TAG,"\nSetting ringer volume to 80 [0-100]....");
         if (verificaComando(UART_NUM_1,"AT+CRSL=80","OK\r\n")==0){
-            printf("\nRinger Volume set !!!\n");
+            ESP_LOGI(TAG,"\nRinger Volume set !!!");
         } else {
-            printf("\nError in setting ringer volume !!!\n");
+            ESP_LOGE(TAG,"\nError in setting ringer volume !!!");
         }
 
-        printf("\nset mic to gain level 10 [0-15]....\n");
+        ESP_LOGW(TAG,"\nSetting mic to gain level 10 [0-15]....");
         if (verificaComando(UART_NUM_1,"AT+CMIC=0,10","OK\r\n")==0){
-            printf("\nMic  gain level set !!!\n");
+            ESP_LOGW(TAG,"\nMic  gain level set !!!");
         } else {
-            printf("\nError in setting mic gain level !!!\n");
+            ESP_LOGE(TAG,"\nError in setting mic gain level !!!");
         }
 
         // ring tone AT+CALS=5,1 to switch on tone 5 5,0 to switch off
@@ -275,25 +275,25 @@ int simOK(uart_port_t uart_controller) { // SIM CHECK OK
         //simReply();
 
         //printf("\nEnabling automatic answer call after 2 ring(s)....\n");
-        printf("\nDisabling automatic answer call after some ring(s)....\n");
+        ESP_LOGW(TAG,"\nDisabling automatic answer call after some ring(s)....");
         if (verificaComando(UART_NUM_1,"ATS0=0","OK\r\n")==0){
-            printf("\nModule will not automaticallly answer !!!\n");
+            ESP_LOGW(TAG,"\nModule will not automaticallly answer !!!");
         } else {
-            printf("\nError in disabling auto answer mode !!!\n");
-        }
+            ESP_LOGE(TAG,"\nError in disabling auto answer mode !!!");
+        }*/
 
-        printf("\nEnabling DTMF recognition....\n");
+        ESP_LOGW(TAG,"\nEnabling DTMF recognition....");
         if (verificaComando(UART_NUM_1,"AT+DDET=1,1000,0,0","OK\r\n")==0){
-            printf("\nDTMF recognition is on !!!\n");
+            ESP_LOGI(TAG,"\nDTMF recognition is on !!!");
         } else {
-            printf("\nError in setting DDET mode !!!\n");
+            ESP_LOGE(TAG,"\nError in setting DDET mode !!!");
         }
 
-        printf("\nSetting SMS text mode....\n");
+        ESP_LOGW(TAG,"\nSetting SMS text mode....");
         if (verificaComando(UART_NUM_1,"AT+CMGF=1","OK\r\n")==0){
-            printf("\nText Mode enabled !!!\n");
+            ESP_LOGW(TAG,"\nText Mode enabled !!!");
         } else {
-            printf("\nNot possible to enable SMS text Mode !!!\n");            
+            ESP_LOGE(TAG,"\nNot possible to enable SMS text Mode !!!");            
         }
 
         /*printf("\nEnabling DTMF recognition....\n");
@@ -301,17 +301,16 @@ int simOK(uart_port_t uart_controller) { // SIM CHECK OK
             printf("\nDTMF recognition is on !!!\n");
         }*/
 
-        printf("\nChecking Signal Quality....\n");
+        ESP_LOGW(TAG,"\nChecking Signal Quality....");
         if (verificaComando(UART_NUM_1,"AT+CSQ","+CSQ")==0){
-            printf("\nQuality report gotten !!! Quality level=%d\n",quality);
+            ESP_LOGI(TAG,"\nQuality report gotten !!! Quality level=%d\n",quality);
         } else {
-            printf("\nNo valid quality report gotten !!!\n");
+            ESP_LOGE(TAG,"\nNo valid quality report gotten !!!\n");
         }
 
         return 0; //OK
-    
     } else {
-        printf("No answer from module: stuck here!!!!!");
+        ESP_LOGE(TAG,"NO ANSWER FROM MODULE: Stuck here!!!!!");
         return -1; //ERROR
     }
 }
@@ -330,14 +329,41 @@ int checkDTMF() {
     char* token;
     for(int k=0;k<10;k++){
         line1 = read_line(UART_NUM_1);
-        stampa_stringa(line1);
+        //stampa_stringa(line1);
         if (strncmp("+DTMF:",line1,strlen("+DTMF:"))==0){
             token = strtok(line1, "+DTMF:");
             //printf("token: %s",token);
             sprintf(parametro_feedback,"%s",token);
-            printf("+DTMF= %s,%d\r\n",parametro_feedback,atoi(parametro_feedback));
+            //printf("+DTMF= %s,%d\r\n",parametro_feedback,atoi(parametro_feedback));
             return(atoi(parametro_feedback));
         }
     }
     return -1; //oonly different feedback
+}
+
+
+int checkCallingNumber(){
+    char *line1;
+    char* token;
+    char* token2;
+    ESP_LOGI(TAG,"checkCallingNumber()\n");
+    for(int k=0;k<10;k++){
+        line1 = read_line(UART_NUM_1);
+        //+CLIP: "+3912345678",145,"",0,"claudio",0
+        if (strncmp("+CLIP: ",line1,strlen("+CLIP: "))==0){
+            token = strtok(line1, "+CLIP: \"");
+            printf("token: %s",token);
+            token2 = strtok(token, "\"");
+            sprintf(parametro_feedback,"%s",token2);
+            printf("token2: %s",token2);
+            sprintf(parametro_feedback,"%s",token2);
+            //printf("+DTMF= %s,%d\r\n",parametro_feedback,atoi(parametro_feedback));
+            if (strncmp(ALLOWED1,token2,sizeof(ALLOWED1))==0){
+                return(0); //OK: Valid Caller
+            } else {
+                return(-1); //Not valid caller
+            }
+        }
+    }
+    return -1; //Only different feedback
 }
