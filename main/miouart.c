@@ -115,7 +115,7 @@ void loop(void){
     stampa_stringa(subline1);
 
     if (command_valid){
-        ESP_LOGW(TAG,"\nCommand valid, sending %s",command);
+        ESP_LOGW(TAG,"\n********Command valid, sending %s",command);
         //uart_write_bytes(UART_NUM_1, command, strlen(command));
         scriviUART(UART_NUM_1, command);
         //verificaComando(UART_NUM_1,command,"OK\r\n");
@@ -130,34 +130,57 @@ void loop(void){
         //digitalWrite(red, LOW); // red LED off
     } else if (current_phone_status == -1){
         ESP_LOGE(TAG,"Not possible to determine Phone Activity Status!!!");
+    } else if (current_phone_status == 3){ //RINGING
+        if (checkCallingNumber()==0){
+            ESP_LOGI(TAG,"\n********Valid calling number: %s. Answering call.....",parametro_feedback);;
+                if (verificaComando(UART_NUM_1,"ATA","OK\r\n")==0){
+                    ESP_LOGI(TAG,"\n********Answered call!!!");
+                    if (verificaComando(UART_NUM_1,"AT+VTS=\"{1,1},{0,2},{6,1}\"","OK\r\n")==0){
+                        ESP_LOGI(TAG,"\n********Answer tones sent!!!");
+                        vTaskDelay(500 / portTICK_RATE_MS);
+                    } else {
+                        ESP_LOGE(TAG,"\n********ERROR in sending answering tones!!!");
+                    }
+                } else {
+                    ESP_LOGE(TAG,"\n********Error in answering allowed call!!!");
+                }
+        } else {
+            ESP_LOGE(TAG,"\n********Calling number %s NOT valid!!! Answering and hanging right after.",parametro_feedback);
+            if (verificaComando(UART_NUM_1,"ATA","OK\r\n")==0){
+                    ESP_LOGI(TAG,"\n********Answered NOT allowed call!!!");
+                    vTaskDelay(2000 / portTICK_RATE_MS);
+                    if (verificaComando(UART_NUM_1,"ATH","OK\r\n")==0){
+                        ESP_LOGI(TAG,"\n********Hanged call!!!");
+                        vTaskDelay(1000 / portTICK_RATE_MS);
+                    } else {
+                        ESP_LOGE(TAG,"\n********ERROR in hanging NOT allowed call!!!");
+                    }
+                } else {
+                    ESP_LOGE(TAG,"\n********Error in answering NOT allowed call!!!");
+                }
+        }
     } else if (current_phone_status == 4) { // in call 
             ESP_LOGW(TAG,"Handling Call....");
             //digitalWrite(red, HIGH); // red LED on
-            int DTMF = checkDTMF();
-            ESP_LOGW(TAG,"Tone detected equals %d",DTMF);
-    } else if (current_phone_status == 3){ //RINGING
-        if (checkCallingNumber()==0){
-            ESP_LOGI(TAG,"Valid calling number: %s",parametro_feedback);
-            ESP_LOGW(TAG,"\nChecking battery level....");
-                if (verificaComando(UART_NUM_1,"ATA","OK\r\n")==0){
-                    ESP_LOGI(TAG,"\nAnswered call!!!");
-                    if (verificaComando(UART_NUM_1,"AT+VTS=\"{1,1],{0,2},{3,1}\"","OK\r\n")==0){
-                        ESP_LOGI(TAG,"\nAnswer tones sent!!!");
-                    } else {
-                        ESP_LOGE(TAG,"\nERROR in sending answering tones!!!");
-                    }
-                } else {
-                    ESP_LOGE(TAG,"\nError in answering Call!!!");
-                }
-        } else {
-            ESP_LOGE(TAG,"Calling number %s NOT valid!!!",parametro_feedback);
-        }
+            //int DTMF = checkDTMF();
+            if (pending_DTMF>=0){
+                int DTMF=pending_DTMF;
+                pending_DTMF=-1;
+                ESP_LOGW(TAG,"Tone detected equals %d. Replying with the same tone.",DTMF);;
+                char replyTone[30];
+                sprintf(replyTone,"AT+VTS=\"{%d,2}\"",DTMF);
+                vTaskDelay(2000 / portTICK_RATE_MS);
+                if (verificaComando(UART_NUM_1,replyTone,"OK\r\n")==0){
+                            ESP_LOGI(TAG,"\nReply tone sent!!!");
+                        } else {
+                            ESP_LOGE(TAG,"\nERROR in sending reply tone!!!");
+                        }
+            } else 
+            {
+                printf("\nnop\n");
+            }
     }
 }
-
-
-
-
 
 // Main application
 void app_main() {
